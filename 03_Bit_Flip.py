@@ -5,7 +5,6 @@ import numpy as np
 import scipy as sc
 import qutip as qt
 import matplotlib.pyplot as plt
-
 def partialTraceRem(obj, rem):
     #prepare keep list
     rem.sort(reverse=True)
@@ -74,8 +73,8 @@ def randomQubitUnitary(numQubits):
     #Return
     return res
 
+# Generating random states for the training data
 def randomQubitState(numQubits):
-    #
     sq = 2 ** numQubits
     res = qt.rand_dm_hs(sq)
     #Make dims list
@@ -86,17 +85,7 @@ def randomQubitState(numQubits):
     #Return
     return res
 
-#def randomTrainingData(unitary, N):
-#    numQubits = len(unitary.dims[0])
-#    trainingData=[]
-#    #Create training data pairs
-#    for i in range(N):
-#        t = randomQubitState(numQubits)
-#        ut = unitary*t*unitary.dag()
-#        trainingData.append([t,ut])
-#    #Return
-#   return trainingData
-
+#Generation of training data for the bit flip with the operation elements for the bit flip as an input
 def TrainingData(listOfOperationElements, N):
     numQubits = len(listOfOperationElements[0].dims[0])
     #print(numQubits)
@@ -110,10 +99,10 @@ def TrainingData(listOfOperationElements, N):
 
     return trainingData
 
+#The list of operation elements for the bit flip. This list changes depending on the channel.
+#For clearer separation and the ability to simultaneously run simulations, all the simulations were put into different files.
 bitFlipList = [math.sqrt(0.7) * tensoredId(1), math.sqrt(1-0.7) * qt.sigmax()]
-#print(bitFlipList[0]+bitFlipList[1])
 
-#print(TrainingData(bitFlipList,1))
 
 
 def randomNetwork(qnnArch, numTrainingPairs):
@@ -140,7 +129,7 @@ def randomNetwork(qnnArch, numTrainingPairs):
     # Return
     return (qnnArch, networkUnitaries, networkTrainingData, networkUnitary)
 
-
+#The cost function with the schatten-2-norm according to the thesis.
 def costFunction(trainingData, outputStates):
     costSum = 0
     for i in range(len(trainingData)):
@@ -180,10 +169,7 @@ def makeAdjointLayerChannel(qnnArch, unitaries, l, outputState):
 
     # Multiply and tensor out output state
     #
-
-    #print(partialTraceKeep(state1 * layerUni.dag() * state2 * layerUni, list(range(numInputQubits))))
     return partialTraceKeep(state1 * layerUni.dag() * state2 * layerUni, list(range(numInputQubits)))
-
 
 def updateMatrixSecondPart(qnnArch, unitaries, trainingData, l, j, x,storedStates): #new dependency on storedStates
     numInputQubits = qnnArch[l - 1]
@@ -191,7 +177,6 @@ def updateMatrixSecondPart(qnnArch, unitaries, trainingData, l, j, x,storedState
 
     # Calculate sigma state
     state =trainingData[x][1] - storedStates[x][-1] # state changed !!!! hier getauscht
-    #print(state.isherm)
     for i in range(len(qnnArch) - 1, l, -1):
         state = makeAdjointLayerChannel(qnnArch, unitaries, i, state)
     # Tensor sigma state
@@ -210,33 +195,24 @@ def feedforward(qnnArch, unitaries, trainingData):
     storedStates = []
     for x in range(len(trainingData)):
         currentState = trainingData[x][0]
-        #print(trainingData[x][1].isherm)
-        #print(x)
         layerwiseList = [currentState]
         for l in range(1, len(qnnArch)):
             currentState = makeLayerChannel(qnnArch, unitaries, l, currentState)
             layerwiseList.append(currentState)
         storedStates.append(layerwiseList)
-        jj = complex(0,1)
-        #for m in storedStates:
-        #   print(m[-1].isherm)
 
     return storedStates
 
 
 def makeUpdateMatrix(qnnArch, unitaries, trainingData, storedStates, lda, ep, l, j):
     numInputQubits = qnnArch[l - 1]
-    jj = complex(0, 1)
 
     # Calculate the sum:
     summ = 0
     for x in range(len(trainingData)):
         # Calculate the commutator
         firstPart = updateMatrixFirstPart(qnnArch, unitaries, storedStates, l, j, x)
-        #print((firstPart*jj).isherm)
         secondPart = updateMatrixSecondPart(qnnArch, unitaries, trainingData, l, j, x,storedStates)
-        #print((secondPart * jj).isherm)
-        #print(secondPart.isherm)
         mat = qt.commutator(firstPart, secondPart)
 
         # Trace out the rest
@@ -244,20 +220,12 @@ def makeUpdateMatrix(qnnArch, unitaries, trainingData, storedStates, lda, ep, l,
         keep.append(numInputQubits + j)
         mat = partialTraceKeep(mat, keep)
 
-
-        #print((mat * jj).isherm)
-        #print(l, j, x)
-        #print(mat)
-
         # Add to sum
         summ = summ + mat
 
     # Calculate the update matrix from the sum
     summ = (-ep * (2 ** numInputQubits) / (lda * len(trainingData))) * summ
-    #summi = summ * jj
-    #print(summi.isherm)
     erg = summ.expm()
-    #print((erg*jj).isherm)
     return erg
 
 def updateMatrixFirstPart(qnnArch, unitaries, storedStates, l, j, x):
@@ -273,15 +241,8 @@ def updateMatrixFirstPart(qnnArch, unitaries, storedStates, l, j, x):
     for i in range(1, j + 1):
         productUni = unitaries[l][i] * productUni
 
-    #erg = productUni * state * productUni.dag()
-    #print(erg.isherm)
-    #print(l,j,x)
-
     # Multiply
     return productUni * state * productUni.dag()
-
-
-
 
 def makeUpdateMatrixTensored(qnnArch, unitaries, lda, ep, trainingData, storedStates, l, j):
     numInputQubits = qnnArch[l - 1]
@@ -339,14 +300,11 @@ def qnnTraining(qnnArch, initialUnitaries, trainingData, lda, ep, trainingRounds
         plotlist[0].append(s)
         plotlist[1].append(costFunction(trainingData, outputStates))
 
-    # Optional
-    #runtime = time() - runtime
-    #print("Trained " + str(trainingRounds) + " rounds for a " + str(qnnArch) + " network and " + str(
-    #    len(trainingData)) + " training pairs in " + str(round(runtime, 2)) + " seconds")
-
     # Return
     return [plotlist, currentUnitaries]
 
+# Calculations for different learning rates with optional plotting.
+'''
 network121 = randomNetwork([1,2,1], 10)
 plotlist121a = qnnTraining(network121[0], network121[1], network121[2], 0.5, 0.1, 500)[0]
 plotlist121b = qnnTraining(network121[0], network121[1], network121[2], 1, 0.1, 500)[0]
@@ -355,18 +313,15 @@ plotlist121d = qnnTraining(network121[0], network121[1], network121[2], 0.1, 0.1
 
 plotlist121 = [plotlist121a[0],plotlist121a[1],plotlist121b[1],plotlist121c[1],plotlist121d[1]]
 
-#for i in range(len(plotlist121[1])):
-#    if plotlist121[1][i] >= 0.95:
-#        print("Exceeds cost of 0.95 at training step "+str(i))
-#        break
-
 columns = "N,a,b,c,d"
 np.savetxt("bitflip 1-2-1 network lda05-1-2-10 eps01.csv",
            np.transpose(plotlist121),
            header = columns,
            delimiter =", ",
            fmt ='% s')
-
+'''
+# optional plotting
+'''
 plt.plot(plotlist121[0], plotlist121[1], label = 'Learning rate = 2')
 plt.plot(plotlist121[0], plotlist121[2], label = 'Learning rate = 1')
 plt.plot(plotlist121[0], plotlist121[3], label = 'Learning rate = 0,5')
@@ -375,8 +330,9 @@ plt.xlabel("s")
 plt.ylabel("Cost[s]")
 plt.legend()
 plt.show()
-
-### Testing different architectures
+'''
+# Caclulations for different architectures.
+'''
 network121 = randomNetwork([1,2,1], 10)
 network11 = randomNetwork([1,1], 10)
 network131 = randomNetwork([1,3,1], 10)
@@ -396,7 +352,9 @@ np.savetxt("biflipdifferentnetworks121o11o131o1221.csv",
            np.transpose(plotlist),
            delimiter=", ",
            fmt = '% s')
-
+'''
+#Optional Plotting
+'''
 plt.plot(plotlist[0], plotlist[1], label = '121')
 plt.plot(plotlist[0], plotlist[2], label = '11')
 plt.plot(plotlist[0], plotlist[3], label = '131')
@@ -405,9 +363,9 @@ plt.xlabel("s")
 plt.ylabel("Cost[s]")
 plt.legend()
 plt.show()
+'''
 
-
-
+# Created for more convenience when testing different parameters.
 def qnnTrainingAvg(qnnArch, initialUnitaries, trainingData, lda, ep, trainingRounds, alert = 0):
     ### FEEDFORWARD
     # Feedforward for given unitaries
@@ -420,9 +378,6 @@ def qnnTrainingAvg(qnnArch, initialUnitaries, trainingData, lda, ep, trainingRou
     for k in range(len(storedStates)):
         outputStates.append(storedStates[k][-1])
     plotlist = [[s], [costFunction(trainingData, outputStates)]]
-
-    # Optional
-    #runtime = time()
 
     # Training of the Quantum Neural Network
     for k in range(trainingRounds):
@@ -454,18 +409,13 @@ def qnnTrainingAvg(qnnArch, initialUnitaries, trainingData, lda, ep, trainingRou
         plotlist[0].append(s)
         plotlist[1].append(costFunction(trainingData, outputStates))
 
-    # Optional
-    #runtime = time() - runtime
-    #print("Trained " + str(trainingRounds) + " rounds for a " + str(qnnArch) + " network and " + str(
-    #    len(trainingData)) + " training pairs in " + str(round(runtime, 2)) + " seconds")
-
     # Return
     return [currentUnitaries, plotlist]
 
 
-
+# Tests the trained networks on the test data
 def testaverage(numberOfRunsToAverage,maxPairs,untrainedTestData):
-    testStates = TrainingData(bitFlipList,untrainedTestData)#Liste mit nicht trainierten Datenpunkten
+    testStates = TrainingData(bitFlipList,untrainedTestData)#List with test data, not used for training
     outputList = [[],[],[]]
     for i in range(1, maxPairs + 1):
         avgSum = 0
@@ -491,35 +441,29 @@ def testaverage(numberOfRunsToAverage,maxPairs,untrainedTestData):
 
 network121 = randomNetwork([1,2,1],10)
 
-#finallist = testaverage(20,10,10)
-#print(finallist[0])
-#print(finallist[1])
-#print(finallist[2])
-#plt.plot(finallist[0], finallist[1], 'o')
-#plt.plot(finallist[0],finallist[2],'o')
-#plt.xlabel("No of training pairs")
-#plt.ylabel("Average Cost for 10 training epochs")
-#plt.legend(loc="upper left")
-#plt.show()
+# Final calculations for the generalisation behaviour, parte where parameters are chosen.
+'''
+finallist = testaverage(20,10,10)
+print(finallist[0])
+print(finallist[1])
+print(finallist[2])
+plt.plot(finallist[0], finallist[1], 'o')
+plt.plot(finallist[0],finallist[2],'o')
+plt.xlabel("No of training pairs")
+plt.ylabel("Average Cost for 10 training epochs")
+plt.legend(loc="upper left")
+plt.show()
 
-#np.savetxt("bitflip 1-2-1 10training pairs 20avg 10trainingdata.csv",
-#           finallist,
-#           delimiter =", ",
-#           fmt ='% s')
-#testMatrix = TrainingData(bitFlipList,1)
-#print(testMatrix)
-#trainedNetwork = qnnTrainingAvg(network121[0], network121[1], network121[2], 0.5, 0.1, 500)
-#print(trainedNetwork)
-#storedState = [feedforward(network121[0], trainedNetwork[0], testMatrix)[-1][-1]]
+np.savetxt("bitflip 1-2-1 10training pairs 20avg 10trainingdata.csv",
+           finallist,
+           delimiter =", ",
+           fmt ='% s')
+testMatrix = TrainingData(bitFlipList,1)
+print(testMatrix)
+trainedNetwork = qnnTrainingAvg(network121[0], network121[1], network121[2], 0.5, 0.1, 500)
+print(trainedNetwork)
+storedState = [feedforward(network121[0], trainedNetwork[0], testMatrix)[-1][-1]]
 
-#print(storedState)
-#print(costFunction(testMatrix,storedState))
-
-
-
-
-
-
-
-
-
+print(storedState)
+print(costFunction(testMatrix,storedState))
+'''
